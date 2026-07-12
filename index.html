@@ -1,5 +1,9 @@
 <title>סטטיסטיקה — תרגול למבחן</title>
 
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
 <style>
 :root{
   --accent:#5145CD; --accent-soft:#EEECFB;
@@ -607,4 +611,7 @@ function done(){
 }
 
 home();
+
+// KaTeX נטען ב-defer — כשהוא מוכן, מרנדרים מחדש את מה שכבר על המסך
+window.addEventListener("load", () => tex(document.body));
 </script>

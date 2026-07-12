@@ -242,7 +242,10 @@ function topics(){
 }
 function stat(qs){
   let done=0, right=0;
-  for(const q of qs){ const r=S.seen[q.id]; if(r && (r.right||r.wrong)){ done++; if(r.right && !r.wrong && !r.guessed) right++; } }
+  for(const q of qs){
+    const r=S.seen[q.id];
+    if(r && (r.right||r.wrong)){ done++; if(r.last && !r.guessed) right++; }
+  }
   return {done, right, total:qs.length, pct: qs.length? Math.round(100*right/qs.length):0};
 }
 function level(st){
@@ -258,7 +261,7 @@ function queue(pool){
   for(const q of pool){
     const r=S.seen[q.id];
     if(!r || (!r.right && !r.wrong)) fresh.push(q);
-    else if(r.wrong > r.right || r.guessed || r.hinted) w.push(q);
+    else if(r.last === false || r.guessed) w.push(q);
     else done.push(q);
   }
   return [...w, ...fresh, ...done];
@@ -327,12 +330,13 @@ function home(){
   view="home"; backBtn.hidden=true; window.scrollTo(0,0);
   const f1 = ALL.filter(q=>q.topic===F1);
   const st1 = stat(f1);
-  const wrong = ALL.filter(q=>{ const r=S.seen[q.id]; return r && (r.wrong>0 || r.guessed); });
+  const wrong = ALL.filter(q=>{ const r=S.seen[q.id]; return r && (r.last === false || r.guessed); });
 
   // מד התקדמות למטרה — כמה שאלות היא באמת שולטת בהן
-  const mastered = ALL.filter(q=>{ const r=S.seen[q.id]; return r && r.right>0 && !r.wrong && !r.guessed && !r.hinted; }).length;
+  const mastered  = ALL.filter(q=>{ const r=S.seen[q.id]; return r && r.last && !r.guessed && !r.hinted; }).length;
   const attempted = ALL.filter(q=>{ const r=S.seen[q.id]; return r && (r.right||r.wrong); }).length;
-  const acc = attempted ? Math.round(100*ALL.filter(q=>{const r=S.seen[q.id];return r&&r.right>0&&!r.wrong;}).length/attempted) : 0;
+  const nowRight  = ALL.filter(q=>{ const r=S.seen[q.id]; return r && r.last && !r.guessed; }).length;
+  const acc = attempted ? Math.round(100*nowRight/attempted) : 0;
   const proj = Math.round(acc*30/100);
   const GOAL = 60;
 
@@ -381,6 +385,14 @@ function home(){
       <span class="ic">⏱️</span>
       <span><b>סימולציית מבחן</b><span>30 שאלות · בלי רמזים · ציון בסוף</span></span>
     </button>
+    <button class="mode" data-go="hour">
+      <span class="ic">🚨</span>
+      <span><b>נשארה לי שעה</b><span>רק המלכודות שחוזרות כל שנה — תשואת הנקודות הגבוהה ביותר</span></span>
+    </button>
+    <button class="mode" data-go="cheat">
+      <span class="ic">📋</span>
+      <span><b>דף נוסחאות ומלכודות</b><span>לפתוח 20 דקות לפני המבחן</span></span>
+    </button>
   </div>
 
   <div class="card">
@@ -426,8 +438,16 @@ function home(){
   app.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{
     const g=b.dataset.go;
     if(g==="learn") return learn();
+    if(g==="cheat") return cheat();
     if(g==="exam")  return start(shuffle(ALL).slice(0,30), {exam:true, name:"סימולציית מבחן"});
-    if(g==="wrong") return start(queue(ALL.filter(q=>{const r=S.seen[q.id];return r&&(r.wrong>0||r.guessed);})), {name:"רק מה שטעיתי"});
+    if(g==="hour"){
+      // הנושאים שהם הכי הרבה שאלות במבחן, ובתוכם מה שהיא הכי חלשה בו
+      const HOT = ["בדיקת השערות, טעויות ועוצמה","רווח בר-סמך","מבחני Z ו-t",
+                   "רגרסיה לינארית","מתאם — פירסון וספירמן"];
+      const pool = ALL.filter(q=>HOT.includes(q.topic) || q.topic===F1);
+      return start(queue(pool).slice(0,25), {name:"נשארה לי שעה"});
+    }
+    if(g==="wrong") return start(queue(ALL.filter(q=>{const r=S.seen[q.id];return r&&(r.last===false||r.guessed);})), {name:"רק מה שטעיתי"});
     // smart: floor-1 mistakes first, then floor-1 fresh, then everything else
     const pool = [...ALL.filter(q=>q.topic===F1), ...ALL.filter(q=>q.topic!==F1 && !S.skipTopics.includes(q.topic))];
     start(queue(pool), {name:"תרגול חכם"});
@@ -521,6 +541,98 @@ function learn(){
   document.getElementById("go").onclick = () => start(queue(ALL.filter(q=>q.topic===F1)), {name:F1, topic:F1});
 }
 
+/* ---------- דף נוסחאות ומלכודות ---------- */
+function cheat(){
+  backBtn.hidden=false; window.scrollTo(0,0);
+  document.getElementById("sub").textContent = "דף נוסחאות ומלכודות";
+  app.innerHTML = `
+  <div class="card" style="border-color:var(--accent)">
+    <h2>📋 20 הדקות שלפני המבחן</h2>
+    <p class="muted">לא ללמוד עכשיו. רק לרענן את מה שמפיל אנשים.</p>
+  </div>
+
+  <div class="card">
+    <h2>🚫 שבעת חוקי הברזל</h2>
+    <div class="sol">כל תשובה שסותרת אחד מאלה — **פסולה מיד**, בלי לחשוב.
+
+| החוק | מה זה פוסל |
+|---|---|
+| מתאם **אינו** סיבתיות | "X גורם ל-Y" על סמך r או רגרסיה |
+| לא "מוכיחים" H1 ולא "מוכיחים" H0 | "השערת המחקר הוכחה" · "H0 נכונה" |
+| p = ההסתברות לתוצאה כזו **בהנחה ש-H0 נכונה** | "p = הסיכוי ש-H0 נכונה" · "שהחוקר צודק" · "שהניסוי ישוחזר" |
+| תקנון **לא משנה צורת התפלגות** | "אסימטרית שהומרה לציוני תקן הופכת לנורמלית" |
+| רווח סמך 95% ≠ "95% שהפרמטר בפנים" | כל ניסוח הסתברותי על רווח **קיים** |
+| הוספת קבוע: מרכז זז, **פיזור לא** | "הוספנו 5 לכולם → הס״ת גדלה" |
+| רמת ביטחון גבוהה ⟺ **α קטן** | כל בלבול בין השניים |</div>
+  </div>
+
+  <div class="card">
+    <h2>⚡ השורה ששווה 4 נקודות</h2>
+    <div class="sol">**מה מגדיל עוצמה?**
+מדגם גדול יותר · α גדול יותר (ביטחון נמוך יותר) · שונות קטנה יותר · אפקט אמיתי גדול יותר · מבחן חד-זנבי (בכיוון הנכון) · מבחן תלויים במקום בל"ת.
+
+**n גדול יותר** → עוצמה ↑ · β ↓ · שגיאת תקן ↓ · רווח סמך **צר** יותר.
+**α לא מושפע מ-n.**
+
+⚠️ **רמת ביטחון גבוהה יותר → רווח סמך רחב יותר.** (לא צר!)</div>
+  </div>
+
+  <div class="card">
+    <h2>🧮 טרנספורמציות</h2>
+    <div class="sol">| פעולה | ממוצע | שונות | ס״ת | ציון תקן |
+|---|---|---|---|---|
+| **+ קבוע $b$** | $+b$ | **לא משתנה** | **לא משתנה** | **לא משתנה** |
+| **× קבוע $c$** | $\times c$ | $\times c^2$ | $\times \lvert c \rvert$ | **לא משתנה** |
+
+עבור $y=cx+b$: הפיזור מושפע **רק מ-$c$**. ה-$b$ נעלם.
+
+**תצפית ששווה לממוצע** → ממוצע קופא, שונות **קטנה**.</div>
+  </div>
+
+  <div class="card">
+    <h2>🎯 איזה מבחן לבחור</h2>
+    <div class="sol">| מה רואים | המבחן |
+|---|---|
+| מדגם אחד, σ **ידועה** | **Z** למדגם יחיד |
+| מדגם אחד, σ **לא ידועה** | **t** למדגם יחיד · $df=n-1$ |
+| שתי קבוצות **נפרדות** | **t** לבלתי תלויים · $df=n_1+n_2-2$ |
+| **אותם נבדקים** פעמיים / זוגות | **t** למדגמים תלויים · $df=n_{זוגות}-1$ |
+| **3+** קבוצות | **ANOVA** |
+| שני משתנים **קטגוריאליים** | **חי בריבוע** |
+
+**תלויים:** ממוצע ההפרשים. **בל״ת:** הפרש הממוצעים.
+תלויים = **פחות df אבל יותר עוצמה**.</div>
+  </div>
+
+  <div class="card">
+    <h2>📐 דרגות חופש — הניגוד שמפיל</h2>
+    <div class="sol">| | df **קטן** → הערך הקריטי |
+|---|---|
+| **t** | **גדל** (יותר קיצוני) |
+| **חי בריבוע** | **קטן** |
+
+ב-**Z אין df בכלל.**
+
+⚠️ **חי בריבוע:** הוספת נבדקים מגדילה את החי **המחושב**, אבל **לא** את הקריטי — כי df תלוי במספר ה**קטגוריות**, לא בנבדקים. (הפוך מ-t!)</div>
+  </div>
+
+  <div class="card">
+    <h2>🔍 שאלות אמריקאיות — טכניקה</h2>
+    <div class="sol">1. **סמני את מילת המפתח.** "מה **לא** נכון?" = שלוש התשובות נכונות, מחפשים את השגויה.
+2. **"בהכרח / בוודאות"** → מספיקה **דוגמה נגדית אחת** לפסול. התשובה **הזהירה** מנצחת את הדרמטית.
+3. **"לא ניתן לדעת"** היא לעיתים קרובות התשובה הנכונה. הקורס הזה אובססיבי לגבול ההסקה.
+4. שאלה תקועה מעל **2 דקות** → נחשי, סמני, המשיכי.
+5. **אין ניקוד שלילי. אל תשאירי שאלה ריקה.** פסלת 2 מתוך 4? זה כבר 50%.
+6. בסוף: לוודא שאין ריקות, ושבשאלות ה"לא נכון" לא סימנת תשובה **נכונה**.</div>
+  </div>
+
+  <div class="card" style="border-color:var(--ok)">
+    <h2>🫶 ולפני שנכנסת</h2>
+    <p>את לא צריכה לדעת הכל. את צריכה לאסוף נקודות. כל מלכודת שאת מזהה היא שאלה שלא תפילי בה.</p>
+  </div>`;
+  app.querySelectorAll(".sol").forEach(n=>{ n.innerHTML = md(n.textContent); });
+}
+
 /* ---------- practice / exam ---------- */
 let Q=[], i=0, opt={}, picked=null, hint=0, answered=false, log=[];
 
@@ -596,6 +708,8 @@ function check(){
   const ok = picked === q.correctAnswer;
   const r = rec(q.id);
   if(ok) r.right++; else r.wrong++;
+  r.last = ok;                 // מה שקובע הוא הניסיון האחרון, לא טעות היסטורית
+  if(ok) r.guessed = false;    // תיקנה בלי לנחש -> מנקים את סימון הניחוש
   save();
   log.push({q, picked, ok});
 

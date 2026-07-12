@@ -158,7 +158,13 @@ button:focus-visible{outline:3px solid var(--accent); outline-offset:2px}
 .big{font-size:52px; font-weight:800; text-align:center; font-variant-numeric:tabular-nums; letter-spacing:-2px}
 .center{text-align:center}
 .muted{color:var(--ink-3); font-size:14px}
-.katex{direction:ltr}
+.katex{direction:ltr; font-size:1.02em}
+.disp{direction:ltr; text-align:center; margin:12px 0; overflow-x:auto; overflow-y:hidden; padding:4px 0}
+.boxed{
+  display:inline-block; direction:ltr;
+  background:var(--accent-soft); color:var(--accent);
+  padding:3px 10px; border-radius:7px; font-weight:800;
+}
 </style>
 
 <div class="wrap">
@@ -233,10 +239,17 @@ function queue(pool){
 }
 function md(t){
   if(!t) return "";
-  let h = t
+  // 1. שולפים את הנוסחאות החוצה לפני כל עיבוד, כדי שה-escaping לא יהרוס אותן
+  const math = [];
+  let h = String(t)
+    .replace(/\$\$([\s\S]+?)\$\$/g, (_,x)=> " M"+(math.push({x, d:true})-1)+" ")
+    .replace(/\$([^$\n]+?)\$/g,     (_,x)=> " M"+(math.push({x, d:false})-1)+" ")
+    .replace(/\\boxed\{([^}]+)\}/g, (_,x)=> " B"+(math.push({x, d:false})-1)+" ");
+
+  // 2. עכשיו בטוח לברוח מ-HTML ולעבד markdown
+  h = h
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
-    .replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")
-    .replace(/\\boxed\{(.+?)\}/g,"<b style='background:var(--accent-soft);color:var(--accent);padding:2px 8px;border-radius:6px'>$1</b>");
+    .replace(/\*\*(.+?)\*\*/g,"<b>$1</b>");
   // markdown tables
   h = h.replace(/((?:^\|.*\|\s*$\n?)+)/gm, (blk)=>{
     const rows = blk.trim().split("\n").filter(r=>r.trim().startsWith("|"));
@@ -250,11 +263,25 @@ function md(t){
     });
     return out + "</table>";
   });
+
+  // 3. מחזירים את הנוסחאות פנימה, מרונדרות
+  h = h.replace(/\s([MB])(\d+)\s/g, (_,kind,n)=>{
+    const m = math[+n];
+    if(!m) return " ";
+    let inner;
+    if(window.katex){
+      try{ inner = katex.renderToString(m.x, {displayMode:m.d, throwOnError:false}); }
+      catch(e){ inner = m.x; }
+    } else {
+      inner = m.x; // KaTeX עדיין לא נטען — מציגים את הביטוי הגולמי, עדיף מכלום
+    }
+    if(kind==="B") return ` <span class="boxed">${inner}</span> `;
+    return m.d ? `<div class="disp">${inner}</div>` : ` ${inner} `;
+  });
   return h;
 }
-function tex(node){ if(window.renderMathInElement) try{ renderMathInElement(node,{delimiters:[
-  {left:"$$",right:"$$",display:true},{left:"$",right:"$",display:false},
-  {left:"\\[",right:"\\]",display:true},{left:"\\(",right:"\\)",display:false}],throwOnError:false}); }catch(e){} }
+// הרינדור קורה בתוך md(); הפונקציה נשארת כדי לא לשבור קריאות קיימות
+function tex(node){}
 
 const SRC = {
   official_practice:["שאלת חזרה רשמית",""],
@@ -610,8 +637,8 @@ function done(){
   document.getElementById("hm").onclick = () => { document.getElementById("sub").textContent="מועד א' · 30 שאלות אמריקאיות"; home(); };
 }
 
-home();
-
-// KaTeX נטען ב-defer — כשהוא מוכן, מרנדרים מחדש את מה שכבר על המסך
-window.addEventListener("load", () => tex(document.body));
+// KaTeX נטען ב-defer. מציירים את המסך הראשון רק אחרי שהוא מוכן,
+// אחרת הנוסחאות במסך הראשון ייצאו כטקסט גולמי.
+if(window.katex) home();
+else window.addEventListener("load", home);
 </script>
